@@ -1,16 +1,26 @@
 plotPS <- function(mod=NULL,ps=NULL,md=NULL,treatment=NULL,caliper,labels=FALSE,Zfuzz,...){
     oldPar <- par(mar=c(5.1,4.1,4.1,4.1))
 
-    if(is.null(md)){
+    if(is.null(md)&is.null(mod)){
+        stopifnot(length(unique(na.omit(treatment)))==2 & length(treatment)==length(ps))
+        md <- data.frame(Z=ifelse(treatment==sort(unique(treatment))[2],1,0),
+                         logOdds=if(all(ps<=1 & ps>=0)) qlogis(ps) else ps)
+    } else if(is.null(md)){
 	    Zname <- as.character(mod$formula[2])
-        Covnames <- names(coef(mod))[-1]
+            Covnames <- names(coef(mod))[-1]
       #	md <- mod$data[,Covnames]
 	    md <- mod$data
 	    md$Z <- mod$data[[Zname]]
-    }
-    else    if(!is.null(treatment)){
+            md$logOdds <- mod$linear
+    }   else {
+        if(length(treatment)>1) stop("treatment vector & md both supplied!")
         if(is.integer(treatment)) names(md)[treatment] <- 'Z'
         if(is.character(treatment)) names(md)[which(names(md)==treatment)] <- 'Z'
+
+        if(length(ps)==1) ps <- md[,ps]
+
+        md$logOdds <- if(all(ps<=1 & ps>=0)) qlogis(ps) else ps
+
     }
 
     if(missing(Zfuzz)){
@@ -18,9 +28,6 @@ plotPS <- function(mod=NULL,ps=NULL,md=NULL,treatment=NULL,caliper,labels=FALSE,
         Zfuzz <- md$Z+(1-md$Z)*runif(nrow(md),-0.2,0.2)
         Zfuzz[md$Z==1] <- 1+treatFuzz
     }
-    if(is.null(mod)){
-      md$logOdds <- ps
-    } else md$logOdds <- mod$linear
 
     ## md$Z <- as.factor(md$Z)
 
@@ -28,6 +35,13 @@ plotPS <- function(mod=NULL,ps=NULL,md=NULL,treatment=NULL,caliper,labels=FALSE,
     ##   geom_boxplot()+
     ##   geom_jitter(width=0.25)+
     ##   ylab('Estimated Log Odds of Adoption')
+    labs <- if(is.chararacter(treatment)){
+                if(length(treatment)==nrow(md)){
+                    sort(unique(treatment))
+                } else if(is.character(md[,treatment])){
+                    sort(unique(md[,treatment]))
+                } else c('Control','Treatment')
+            } else c('Control','Treatment')
 
     plot(Zfuzz,md$logOdds,xlim=c(-0.5,1.5),xaxt='n',
          ylab='Estimated Log Odds of Adoption',xlab=NA,pch=16,...)
@@ -35,7 +49,7 @@ plotPS <- function(mod=NULL,ps=NULL,md=NULL,treatment=NULL,caliper,labels=FALSE,
            md$logOdds[md$Z==1]+caliper*sd(md$logOdds),
            md$logOdds[md$Z==1]-caliper*sd(md$logOdds),add=TRUE)
     if(labels) text(Zfuzz[md$Z==1],md$logOdds[md$Z==1],rownames(md)[md$Z==1])
-    axis(side=1,at=c(0,1),labels=c('Control','Treatment'))
+    axis(side=1,at=c(0,1),labels=labs)
     rtLbls <- seq(min(md$logOdds),max(md$logOdds),length=5)
     axis(side=4,at=rtLbls,
          labels=round((rtLbls-mean(md$logOdds))/sd(md$logOdds),1))
